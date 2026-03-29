@@ -1,1 +1,162 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CEX Order Book Simulator</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; display: flex; justify-content: center; gap: 30px; }
+        .panel { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 350px; }
+        h2 { margin-top: 0; font-size: 1.2rem; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .order-row { display: flex; justify-content: space-between; padding: 5px 0; font-family: monospace; font-size: 1.1rem; }
+        .ask { color: #d32f2f; }
+        .bid { color: #388e3c; }
+        .spread { text-align: center; padding: 15px 0; font-weight: bold; color: #555; font-size: 1rem; border-top: 1px solid #eee; border-bottom: 1px solid #eee; margin: 10px 0; background-color: #f9f9f9; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-size: 0.9rem; margin-bottom: 5px; font-weight: bold; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; color: white; cursor: pointer; font-size: 1rem; margin-top: 10px; }
+        #submit-btn { background-color: #007bff; }
+        #submit-btn:hover { background-color: #0056b3; }
+        .log-entry { font-size: 0.85rem; padding: 8px; border-bottom: 1px solid #eee; }
+        .log-entry:last-child { border-bottom: none; }
+    </style>
+</head>
+<body>
+
+    <div class="panel">
+        <h2>Order Book (Asset X)</h2>
+        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: #888; font-weight: bold; padding-bottom: 5px;">
+            <span>Price ($)</span><span>Quantity</span>
+        </div>
+        <div id="asks-container"></div>
+        <div id="spread-container" class="spread">Spread: $0.00</div>
+        <div id="bids-container"></div>
+    </div>
+
+    <div class="panel">
+        <h2>Place Order</h2>
+        <div class="form-group">
+            <label>Action</label>
+            <select id="action">
+                <option value="buy">Buy</option>
+                <option value="sell">Sell</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Type</label>
+            <select id="type" onchange="togglePriceInput()">
+                <option value="limit">Limit</option>
+                <option value="market">Market</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Quantity</label>
+            <input type="number" id="qty" min="1" value="10">
+        </div>
+        <div class="form-group" id="price-group">
+            <label>Price ($)</label>
+            <input type="number" id="price" step="0.01" value="50.00">
+        </div>
+        <button id="submit-btn" onclick="placeOrder()">Submit Order</button>
+
+        <h2 style="margin-top: 30px;">Recent Trades</h2>
+        <div id="trade-log" style="max-height: 200px; overflow-y: auto;"></div>
+    </div>
+
+    <script>
+        // Initial Data State
+        let asks = [{price: 50.10, qty: 10}, {price: 50.25, qty: 50}, {price: 50.50, qty: 100}];
+        let bids = [{price: 49.90, qty: 20}, {price: 49.75, qty: 60}, {price: 49.50, qty: 120}];
+
+        function renderBook() {
+            const asksDiv = document.getElementById('asks-container');
+            const bidsDiv = document.getElementById('bids-container');
+            const spreadDiv = document.getElementById('spread-container');
+            
+            asksDiv.innerHTML = ''; bidsDiv.innerHTML = '';
+
+            // Render Asks (Descending to middle)
+            [...asks].reverse().forEach(ask => {
+                asksDiv.innerHTML += `<div class="order-row ask"><span>${ask.price.toFixed(2)}</span><span>${ask.qty}</span></div>`;
+            });
+
+            // Render Bids (Descending from middle)
+            bids.forEach(bid => {
+                bidsDiv.innerHTML += `<div class="order-row bid"><span>${bid.price.toFixed(2)}</span><span>${bid.qty}</span></div>`;
+            });
+
+            // Calculate Spread
+            if (asks.length > 0 && bids.length > 0) {
+                const spread = (asks[0].price - bids[0].price).toFixed(2);
+                spreadDiv.innerHTML = `Spread: $${spread}`;
+            } else {
+                spreadDiv.innerHTML = `Spread: N/A (Missing Liquidity)`;
+            }
+        }
+
+        function togglePriceInput() {
+            const type = document.getElementById('type').value;
+            document.getElementById('price').disabled = (type === 'market');
+        }
+
+        function logTrade(message) {
+            const logDiv = document.getElementById('trade-log');
+            logDiv.innerHTML = `<div class="log-entry">${message}</div>` + logDiv.innerHTML;
+        }
+
+        function placeOrder() {
+            const action = document.getElementById('action').value;
+            const type = document.getElementById('type').value;
+            let qty = parseInt(document.getElementById('qty').value);
+            const price = parseFloat(document.getElementById('price').value);
+
+            if (isNaN(qty) || qty <= 0) return alert("Enter a valid quantity");
+
+            if (action === 'buy') {
+                // Matching Engine logic for BUY
+                while (qty > 0 && asks.length > 0 && (type === 'market' || price >= asks[0].price)) {
+                    let bestAsk = asks[0];
+                    let tradeQty = Math.min(qty, bestAsk.qty);
+                    logTrade(`Executed: Bought ${tradeQty} @ $${bestAsk.price.toFixed(2)}`);
+                    qty -= tradeQty;
+                    bestAsk.qty -= tradeQty;
+                    if (bestAsk.qty === 0) asks.shift(); // Remove empty ask
+                }
+                // Add remaining to book if Limit
+                if (qty > 0 && type === 'limit') {
+                    bids.push({price: price, qty: qty});
+                    bids.sort((a, b) => b.price - a.price); // Sort descending
+                    logTrade(`Added to Book: Bid ${qty} @ $${price.toFixed(2)}`);
+                } else if (qty > 0 && type === 'market') {
+                    logTrade(`Market order partially unfilled: ${qty} remaining (No more sellers)`);
+                }
+
+            } else {
+                // Matching Engine logic for SELL
+                while (qty > 0 && bids.length > 0 && (type === 'market' || price <= bids[0].price)) {
+                    let bestBid = bids[0];
+                    let tradeQty = Math.min(qty, bestBid.qty);
+                    logTrade(`Executed: Sold ${tradeQty} @ $${bestBid.price.toFixed(2)}`);
+                    qty -= tradeQty;
+                    bestBid.qty -= tradeQty;
+                    if (bestBid.qty === 0) bids.shift(); // Remove empty bid
+                }
+                // Add remaining to book if Limit
+                if (qty > 0 && type === 'limit') {
+                    asks.push({price: price, qty: qty});
+                    asks.sort((a, b) => a.price - b.price); // Sort ascending
+                    logTrade(`Added to Book: Ask ${qty} @ $${price.toFixed(2)}`);
+                } else if (qty > 0 && type === 'market') {
+                    logTrade(`Market order partially unfilled: ${qty} remaining (No more buyers)`);
+                }
+            }
+            renderBook();
+        }
+
+        // Initial Render
+        renderBook();
+    </script>
+</body>
+</html>
